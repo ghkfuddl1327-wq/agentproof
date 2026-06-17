@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Env / secrets
+.env
+.env.*
+*.key
+*.pem
+
+# Claude Code local settings
+.claude/
+
+# OS
+.DS_Store
