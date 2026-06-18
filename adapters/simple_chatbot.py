@@ -64,3 +64,6 @@ class SimpleChatbotAdapter(AgentAdapter):
 
     def get_target_name(self) -> str:
         return self.target_name
+
+    def required_env_vars(self) -> list[str]:
+        return ["GEMINI_API_KEY"]

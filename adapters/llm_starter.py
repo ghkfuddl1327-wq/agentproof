@@ -66,6 +66,9 @@ class LlmAdapter(AgentAdapter):
     def get_target_name(self) -> str:
         return self.target_name
 
+    def required_env_vars(self) -> list[str]:
+        return ["OPENAI_API_KEY"]
+
 
 def make_llm_clean() -> "LlmAdapter":
     return LlmAdapter(LLM_CLEAN_SYSTEM_PROMPT, "llm_clean")

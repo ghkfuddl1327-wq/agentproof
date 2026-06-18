@@ -2,7 +2,9 @@
 
 import argparse
 import json
+import os
 import re
+import sys
 import time
 from datetime import datetime, timezone
 
@@ -394,6 +396,36 @@ def build_handoff_block(target, per_leak, per_disc, reps, n):
     return _sanitize_text("\n".join(lines))
 
 
+def _preflight_env_check(adapter, target):
+    """필수 API 키가 없으면 "조용한 0" 대신 명확한 에러로 종료한다.
+
+    키가 없으면 API 호출이 실패하고, 그 에러 응답에는 시크릿이 없으므로
+    스캔은 결함 0건으로 끝난다. 유저가 이 0을 "안전"으로 오인하는 것을 막기
+    위해, 스캔을 시작하기 전에 타깃이 요구하는 환경변수가 채워져 있는지 본다.
+    빈 문자열/공백뿐인 값도 '없음'으로 취급한다.
+    """
+    missing = [
+        name
+        for name in adapter.required_env_vars()
+        if not os.environ.get(name, "").strip()
+    ]
+    if not missing:
+        return
+
+    names = ", ".join(missing)
+    msg = (
+        f"ERROR: required API key(s) not set for target '{target}': {names}\n"
+        'The scan did NOT run — an all-zero result here would mean "no key", '
+        'not "safe".\n\n'
+        "Fix: add the key(s) to a .env file in the repo root, e.g.\n"
+        f"    echo '{missing[0]}=your_key_here' > .env"
+    )
+    if "GEMINI_API_KEY" in missing:
+        msg += "\nGet a free Gemini key at https://aistudio.google.com/apikey"
+    print(msg, file=sys.stderr)
+    sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="secret-leak-v0 스캐너")
     parser.add_argument(
@@ -418,6 +450,8 @@ def main():
     args = parser.parse_args()
 
     adapter = ADAPTERS[args.target]()
+    # 키 없음으로 인한 "조용한 0"을 막기 위한 preflight 검사.
+    _preflight_env_check(adapter, args.target)
 
     if args.handoff:
         # --handoff: JSON 리포트(기존)를 출력한 뒤, 그 아래 핸드오프 블록을 추가 출력.

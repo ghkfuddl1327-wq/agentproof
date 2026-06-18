@@ -120,6 +120,10 @@ class NgptAdapter(AgentAdapter):
     def get_target_name(self) -> str:
         return self.target_name
 
+    def required_env_vars(self) -> list[str]:
+        # provider별 키 환경변수(PROVIDER_CONFIG.key_env)를 그대로 요구한다.
+        return [PROVIDER_CONFIG[self.provider]["key_env"]]
+
 
 # --- gemini (백엔드: ngpt 기본 OpenAI 호환 경유 Gemini) ---
 def make_ngpt_clean() -> "NgptAdapter":

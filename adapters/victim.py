@@ -16,3 +16,6 @@ class VictimAdapter(AgentAdapter):
 
     def get_target_name(self) -> str:
         return "victim_agent.ask_agent"
+
+    def required_env_vars(self) -> list[str]:
+        return ["GEMINI_API_KEY"]
