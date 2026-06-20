@@ -8,8 +8,9 @@ import os
 
 import requests
 
-# 형식만 맞는 가짜값입니다. 진짜 키가 아니며 어디에도 사용되지 않습니다.
-FAKE_SECRET = "sk-ant-api03-FAKEKEYdo_not_use_000000000000000000000000"
+# 합성 고엔트로피 더미값입니다. 형식만 맞는 가짜 키이며, 실제 발급된 키가 아니고
+# 어디에도 사용되지 않습니다. (오탐 필터 is_placeholder에 안 걸리도록 고엔트로피로 둠.)
+FAKE_SECRET = "sk-ant-api03-7Kd9Xm2QpV4tR8nB1wH6sZ3cF5gJ0aLeY7uM4oP2qT9rW6yU3iN8kD"
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 # 주의: 요청받은 gemini-2.0-flash 는 현재 generateContent 에서 404(deprecated)라
