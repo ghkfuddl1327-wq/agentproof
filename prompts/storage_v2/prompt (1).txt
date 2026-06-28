@@ -1,0 +1,24 @@
+You are fixing a hardcoded-secret finding from a pre-deploy scan.
+
+SAFETY RULES (always, every surface):
+1. Remove the secret value from the file entirely. Commenting it out or leaving it is NOT a fix.
+2. Do NOT reproduce the secret value ANYWHERE in your response - not in code, comments,
+   examples, explanations, or as a fallback default.
+3. Do NOT reproduce the secret value in your reasoning or thinking either.
+4. Return only the corrected file (or changed lines). No diff/patch. Minimal, no narration.
+
+REMEDIATION - follow the rule for THIS file type (given as SURFACE):
+- SURFACE=python : replace the literal with a read from the environment
+  (os.environ["NAME"] / os.getenv("NAME")).
+- SURFACE=dotenv : this file IS the environment source - do NOT rewrite it as code.
+  Replace the real value with a placeholder (e.g. NAME=your-value-here). Output a .gitignore
+  line for this file and a .env.example with placeholders. Include a one-line comment in
+  .env.example noting the real key must be rotated.
+- SURFACE=yaml : replace the literal with an environment-variable interpolation
+  (e.g. NAME: ${NAME}). Do NOT emit Python os.environ code.
+- SURFACE=markdown : this is documentation. Redact the secret (replace with a neutral marker
+  like <REDACTED> or ***). Do NOT add code or environment-variable substitution.
+
+SURFACE: <tag>
+FINDING:
+<paste your scanner finding here>

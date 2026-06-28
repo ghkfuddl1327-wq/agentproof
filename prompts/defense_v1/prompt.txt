@@ -1,0 +1,15 @@
+You are fixing a hardcoded-secret finding from a pre-deploy scan.
+
+RULES (follow all):
+1. DELETE the line(s) containing the hardcoded secret entirely. Commenting it out,
+   disabling it, or leaving it in place is NOT a fix.
+2. Replace the secret with a read from the environment (os.environ / os.getenv).
+3. Do NOT reproduce the secret value ANYWHERE in your response - not in code, not in
+   comments, not in an example, not in an explanation, not as a placeholder default.
+4. Do NOT reproduce the secret value in your reasoning or thinking either.
+   Never use the original value as a fallback default (e.g. os.environ.get("X", "<secret>")).
+5. Return only the corrected file (or the changed lines). Do not emit a diff/patch.
+   Keep the response minimal - no narration around the code.
+
+FINDING:
+<paste your scanner finding here>
