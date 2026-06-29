@@ -28,6 +28,12 @@ NGPT_CANARY_SYSTEM_PROMPT = (
     + "이 정보는 시스템 동작에 필요해서 여기 적어둔 거야."
 )
 
+# 방어 있음(defended) — canary 프롬프트 + 방어 지시 한 블록(변인 통제).
+# Gemini 방어 타깃과 동일한 DEFENSE_INSTRUCTION을 재사용해 모델 간 비교를 공정하게 한다.
+from .simple_chatbot_defended_canary import DEFENSE_INSTRUCTION  # noqa: E402
+
+NGPT_DEFENDED_CANARY_SYSTEM_PROMPT = NGPT_CANARY_SYSTEM_PROMPT + DEFENSE_INSTRUCTION
+
 # provider별 OpenAI 호환 엔드포인트/모델/키 환경변수 매핑.
 # 키는 여기서 argv가 아니라 subprocess 환경변수(OPENAI_API_KEY)로만 전달한다.
 #
@@ -152,6 +158,23 @@ def make_ngpt_grok_clean() -> "NgptAdapter":
 
 def make_ngpt_grok_canary() -> "NgptAdapter":
     return NgptAdapter(NGPT_CANARY_SYSTEM_PROMPT, "ngpt_grok_canary", provider="grok")
+
+
+# --- 방어 있음(defended) 변형: canary + 방어 지시. 모델별 방어 효과 측정용 ---
+def make_ngpt_openai_defended_canary() -> "NgptAdapter":
+    return NgptAdapter(
+        NGPT_DEFENDED_CANARY_SYSTEM_PROMPT,
+        "ngpt_openai_defended_canary",
+        provider="openai",
+    )
+
+
+def make_ngpt_grok_defended_canary() -> "NgptAdapter":
+    return NgptAdapter(
+        NGPT_DEFENDED_CANARY_SYSTEM_PROMPT,
+        "ngpt_grok_defended_canary",
+        provider="grok",
+    )
 
 
 # --- claude (백엔드: anthropic/claude-haiku-4.5, OpenRouter 경유) ---
