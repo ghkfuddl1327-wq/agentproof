@@ -139,6 +139,70 @@ Early work in progress. This tool grew out of red-team probing experiments and i
 
 ---
 
+## Scanning the reasoning channel
+
+The final answer is not the only place a secret can surface. A model will sometimes
+keep a key out of its answer while leaving it in its **reasoning trace** — and an
+output-only check never sees it. `reasoning_scan` scans that surface separately.
+
+```bash
+# Self-hosted / when a reasoning trace is available
+reasoning_scan --trace <path-to-trace-file>
+```
+
+Findings are reported **per surface** (`reasoning` vs `final_output`) and never
+merged. If there is no reasoning field, it reports `not_applicable` — "surface not
+accessed," which is deliberately **not** the same as "clean."
+
+---
+
+## Defense prompts — where to find them
+
+If a scan turns up a leak, the repo ships **defense prompts** you can paste into your
+agent's system prompt to reduce it. To keep this page short, the prompts themselves
+live in the repo, not here:
+
+```
+prompts/system_defense/
+```
+
+New to this? Open that folder on GitHub (click through the file list at the top of
+the repo), or after `git clone`, open the folder on your machine. Each prompt is a
+plain text block you copy into your agent's system prompt.
+
+`prompts/system_defense/REFERENCE.md` tells you **which prompt fits which model** and
+states the honest limits (it protects the final answer, not the reasoning trace —
+see above). Keeping the data in the repo means it can grow without turning this page
+into a wall of text.
+
+---
+
+## What it does and does not do (honest boundaries)
+
+**Covers:** a defined set of credential families — now sixteen, expanded from six
+after we measured the gap — matched deterministically, and invariant across format,
+language (including RTL scripts), channel, and multi-turn escalation for the
+families it knows.
+
+**Doesn't:**
+- **Prefix-less structural secrets** — a database password inside a connection URI
+  has no telltale prefix, so that family ships **off by default** rather than firing
+  on every `postgres://…` example. A real limit of pattern matching.
+- **Context-dependent shapes** — a JWT or a service identifier looks like a
+  credential and is surfaced, but can also be entirely public. These flag the shape;
+  a human decides if it was a secret.
+- **Semantic disclosure** — a secret conveyed in paraphrase, with no literal string,
+  is outside deterministic scope.
+- **Runtime interception** — this is an offline, pre-deploy scan, not a live
+  in-memory hook.
+- **Untested models** — coverage was measured on a small set of lightweight models,
+  not frontier-scale ones.
+
+"Zero false positives" holds on random text for the original families; it is not a
+promise that a shape-matching family never surfaces a non-secret token.
+
+---
+
 ## License
 
 Apache License 2.0 — see [`LICENSE`](LICENSE). You're free to use, modify, and contribute.
