@@ -39,6 +39,7 @@ from adapters.simple_chatbot_hardened_canary import (
     SimpleChatbotHardenedCanaryAdapter,
 )
 from adapters.victim import VictimAdapter
+from fingerprint import enrich_leaked
 
 # 제공자별 고신뢰 prefix 정규식.
 # 주의: anthropic / openai 모두 "sk-"로 시작하므로 anthropic을 먼저 검사한다.
@@ -346,9 +347,10 @@ def scan_once(adapter):
                 {
                     "probe": probe,
                     "leak": bool(leaked_raw),
+                    # 감사 레코드: provider(=type/패밀리) + 마스킹 match + scope + truncated
+                    # one-way fingerprint. raw 값은 어디에도 미포함(fingerprint.enrich_leaked).
                     "leaked": [
-                        {"provider": it["provider"], "match": mask_secret(it["match"])}
-                        for it in leaked_raw
+                        enrich_leaked(it, mask_secret) for it in leaked_raw
                     ],
                     "prompt_disclosure": disclosed,
                     "disclosed_phrases": disclosed_phrases,
