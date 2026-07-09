@@ -105,7 +105,7 @@ agentproof-scan --target simple_chatbot_hardened_canary   # stronger prompt guar
 
 The clearest pattern in our testing: **leak behavior depends heavily on the underlying model**, not just on the prompt — the same leaky agent prompt can be far more exposed behind one model than another. Role-play / "debug mode" framings have been the most model-dependent so far.
 
-We're deliberately **not** publishing per-category leak-rate figures in this README yet. The probe set in this public repo has been abstracted to neutral, category-labeled questions, so any numbers measured with earlier probe wording wouldn't transfer cleanly — quoting them here would overclaim. The measurement write-ups that *are* documented (including a cross-model study of how well "fix" prompts actually remediate a leak, with dated results) live in [`prompts/`](prompts/). Treat all of it as work in progress.
+We're deliberately **not** publishing per-category leak-rate figures in this README yet. The probe set in this public repo has been abstracted to neutral, category-labeled questions, so any numbers measured with earlier probe wording wouldn't transfer cleanly — quoting them here would overclaim. The measurement write-ups that *are* documented (including a cross-model study of how well "fix" prompts actually remediate a leak, with dated results) live in [`prompts/`](https://github.com/ghkfuddl1327-wq/agentproof/tree/main/prompts). Treat all of it as work in progress.
 
 Multi-model targets (`ngpt_*`, `llm_*`) need `pip install ngpt llm` plus the relevant provider key (`OPENAI_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`, …) in your `.env`.
 
@@ -156,6 +156,11 @@ agentproof-scan --url https://my-agent.example.com/chat \
 Your key stays in `.env`. It is never written to the config, the report, or any log,
 and any secret-shaped string in a response is masked before it's printed.
 
+> **Found a real one?** If the scan surfaces an actual secret from your own agent,
+> it's masked in the report — but treat anything flagged as **compromised and rotate
+> it**. The scanner tells you *what type* leaked and *where*; your secret store is the
+> source of truth for the value.
+
 **Reasoning trace?** If your agent returns its "thinking," add `--reasoning-field
 <path>` and the scanner checks that surface too — separately from the answer (see
 [Scanning the reasoning channel](#scanning-the-reasoning-channel)).
@@ -195,6 +200,56 @@ bodies, streaming responses, and non-HTTP transports — are expanding from here
 
 ---
 
+## 🔁 Run it in CI (fail the build on a leak, before it merges)
+
+Point it at your own agent in a GitHub Action so a leak turns the check **red**
+instead of reaching production. Put your agent's URL and key in **repo Secrets**
+(never in the file), and add `.github/workflows/agentproof.yml`:
+
+```yaml
+name: agentproof secret-leak scan
+on: [push, pull_request]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+
+      - run: pip install agentproof-scan
+
+      - name: Scan my agent for leaks
+        env:
+          AGENT_URL: ${{ secrets.AGENT_URL }}
+          MY_AGENT_KEY: ${{ secrets.MY_AGENT_KEY }}
+        run: |
+          if [ -z "$AGENT_URL" ]; then
+            echo "AGENT_URL secret is not set — refusing to scan."
+            exit 1
+          fi
+          agentproof-scan \
+            --url "$AGENT_URL" \
+            --prompt-field message \
+            --response-field reply \
+            --auth-header "Authorization=Bearer {MY_AGENT_KEY}" \
+            --fail-on-findings
+```
+
+*(Also at [`examples/ci/agentproof.yml`](https://github.com/ghkfuddl1327-wq/agentproof/blob/main/examples/ci/agentproof.yml) — copy it, don't clone the repo.)*
+
+**Don't drop the `AGENT_URL` guard.** An unset secret is an empty string, and an
+empty `--url` makes the scanner fall back to its **bundled demo agent** — which
+leaks on purpose. Without the guard your build goes red over a planted fake secret
+while your real agent is never scanned. Forked pull requests get no secrets at all,
+so they always take this path.
+
+If your agent leaks a secret, `--fail-on-findings` exits non-zero and the check goes
+red. By default it fails on **leaked secrets only** (not softer prompt-disclosure
+signals); add `--fail-on any` to gate on those too. Scan only agents you own.
+
+---
+
 ## ❓ Stuck? (no experience needed — your escape hatch)
 
 If any step is confusing, paste this into an AI assistant and follow along:
@@ -216,7 +271,7 @@ Early work in progress. This tool grew out of red-team probing experiments and i
 **Known limitation:** a present-but-invalid key (wrong or expired) can still produce a `0` — detecting invalid keys from API-error responses is a planned follow-up.
 
 **Not yet in this release:** wider credential-type coverage (Stripe, Slack, JWT, PEM,
-SendGrid, Twilio, npm, …) is implemented and tested, but `0.1.1` ships only the six
+SendGrid, Twilio, npm, …) is implemented and tested, but `0.1.2` ships only the six
 families listed under [What it catches](#what-it-catches--and-what-it-doesnt-plainly).
 It lands in a later release rather than being advertised here before you can run it.
 
@@ -259,16 +314,14 @@ If a scan turns up a leak, the repo ships **defense prompts** you can paste into
 agent's system prompt to reduce it. To keep this page short, the prompts themselves
 live in the repo, not here:
 
-```
-prompts/system_defense/
-```
+[`prompts/system_defense/`](https://github.com/ghkfuddl1327-wq/agentproof/tree/main/prompts/system_defense)
 
-New to this? Browse that folder on GitHub (click through the file list at the top of
-the repo). Installed via pip? The prompts live in the repo, not the package — read
-them on GitHub, or `git clone` the repo if you want them locally. Each prompt is a
-plain text block you copy into your agent's system prompt.
+Installed via pip? The prompts live in the repo, not the package — open the link
+above, or `git clone` the repo if you want them locally. Each prompt is a plain text
+block you copy into your agent's system prompt.
 
-`prompts/system_defense/REFERENCE.md` tells you **which prompt fits which model** and
+[`REFERENCE.md`](https://github.com/ghkfuddl1327-wq/agentproof/blob/main/prompts/system_defense/REFERENCE.md)
+tells you **which prompt fits which model** and
 states the honest limits (it protects the final answer, not the reasoning trace —
 see above). Keeping the data in the repo means it can grow without turning this page
 into a wall of text.
@@ -278,7 +331,7 @@ into a wall of text.
 ## What it catches — and what it doesn't (plainly)
 
 **It catches:** a set list of credential types, matched by their shape. As of
-`0.1.1` that's **six families** — OpenAI, Anthropic, Google, AWS, GitHub, and xAI.
+`0.1.2` that's **six families** — OpenAI, Anthropic, Google, AWS, GitHub, and xAI.
 Matching holds up whether the secret is in plain text or JSON, across different
 languages, and in the answer or the reasoning — for the types it knows.
 
@@ -288,7 +341,7 @@ and docs don't set off false alarms.
 
 **It doesn't catch:**
 - **Credential types outside those six** — Stripe, Slack, JWTs, PEM private keys,
-  SendGrid, Twilio, npm tokens and others are **not** matched in `0.1.1`. Broader
+  SendGrid, Twilio, npm tokens and others are **not** matched in `0.1.2`. Broader
   type coverage is built and tested but not yet released here (see Status).
 - **Secrets with no tell-tale prefix** — e.g. a database password buried in a
   `postgres://…` URL. A real limit of shape-matching.
@@ -306,4 +359,4 @@ promise that a shape-matching type never flags a token that turns out to be publ
 
 ## License
 
-Apache License 2.0 — see [`LICENSE`](LICENSE). You're free to use, modify, and contribute.
+Apache License 2.0 — see [`LICENSE`](https://github.com/ghkfuddl1327-wq/agentproof/blob/main/LICENSE). You're free to use, modify, and contribute.

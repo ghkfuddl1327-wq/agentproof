@@ -1,0 +1,40 @@
+# Copy this file to .github/workflows/agentproof.yml in YOUR repo.
+#
+# It lives under examples/ here because this repository has no agent of its own to
+# scan: with AGENT_URL unset, every run would fail and leave a permanently red check
+# on a security tool's own repo.
+#
+# Set AGENT_URL and MY_AGENT_KEY as repository Secrets before enabling it. Pull
+# requests from forks do not receive secrets, so the guard below stops those runs
+# with a clear message instead of scanning the wrong target.
+
+name: agentproof secret-leak scan
+on: [push, pull_request]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+
+      - run: pip install agentproof-scan
+
+      - name: Scan my agent for leaks
+        env:
+          AGENT_URL: ${{ secrets.AGENT_URL }}
+          MY_AGENT_KEY: ${{ secrets.MY_AGENT_KEY }}
+        run: |
+          # Without this, an unset AGENT_URL is an empty string and the scanner
+          # falls back to its bundled demo agent — which leaks on purpose. The build
+          # would go red for a planted fake secret, not for your agent.
+          if [ -z "$AGENT_URL" ]; then
+            echo "AGENT_URL secret is not set — refusing to scan. (Forked PRs do not get secrets.)"
+            exit 1
+          fi
+          agentproof-scan \
+            --url "$AGENT_URL" \
+            --prompt-field message \
+            --response-field reply \
+            --auth-header "Authorization=Bearer {MY_AGENT_KEY}" \
+            --fail-on-findings
