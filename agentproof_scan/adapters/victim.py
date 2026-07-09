@@ -1,6 +1,6 @@
 """victim.py — 기존 victim_agent를 감싸는 어댑터 (회귀 테스트용으로 유지)."""
 
-import victim_agent
+from .. import victim_agent
 
 from .base import AgentAdapter
 

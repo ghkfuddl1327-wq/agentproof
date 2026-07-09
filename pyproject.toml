@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=77.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentproof-scan"
+version = "0.1.0"
+description = "CLI security scanner: probes AI-agent HTTP endpoints for secret/prompt leakage, with CI-gating exit codes."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "AgentProof" }]
+keywords = ["security", "llm", "agent", "scanner", "prompt-injection", "secret-leak"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Security",
+]
+dependencies = [
+    "requests>=2.25",
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+agentproof-scan = "agentproof_scan.scan:main"
+
+[project.urls]
+Homepage = "https://github.com/ghkfuddl1327-wq/agentproof"
+Source = "https://github.com/ghkfuddl1327-wq/agentproof"
+
+[tool.setuptools]
+# CUSTODY-CRITICAL: explicit allow-list, NO find_packages/auto-discovery.
+# Auto-discovery on this repo would sweep root-level dev helpers (reverify.py,
+# storage_classifier.py, test_fingerprint.py) and the scan.py launcher into the
+# artifact. PyPI is irreversible, so the shipped modules are named explicitly.
+packages = ["agentproof_scan", "agentproof_scan.adapters"]
+include-package-data = false

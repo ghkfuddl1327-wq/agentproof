@@ -22,7 +22,7 @@ decision, like the post-match validator).
 from collections import namedtuple
 
 # Established no-cycle shim: scan never imports reverify (one-directional dependency).
-from scan import detect_secrets            # existing detector — not reimplemented here
+from agentproof_scan.scan import detect_secrets            # existing detector — not reimplemented here
 
 # verdict is the headline; before_leaked/after_leaked are the raw evidence.
 Result = namedtuple("Result", ["verdict", "before_leaked", "after_leaked"])

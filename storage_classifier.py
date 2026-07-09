@@ -13,7 +13,7 @@ rule. Honest degrade: no file context -> UNKNOWN_CONTEXT, never asserts PLAINTEX
 import os
 import re
 
-from scan import is_placeholder          # reuse existing placeholder gate (first pass, unchanged)
+from agentproof_scan.scan import is_placeholder          # reuse existing placeholder gate (first pass, unchanged)
 
 
 def _read_target(path):

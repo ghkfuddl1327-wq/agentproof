@@ -6,6 +6,10 @@ __pycache__/
 .venv/
 venv/
 
+# Build artifacts (PyPI dist — built locally, never committed)
+build/
+dist/
+
 # Env / secrets
 .env
 .env.*

@@ -20,8 +20,8 @@ os.environ["AGP_FINGERPRINT_SALT_FILE"] = os.path.join(
 os.environ.pop("AGP_FINGERPRINT_SALT", None)
 os.environ.pop("AGP_FINGERPRINT_SALT_DISABLE", None)
 
-import scan
-import fingerprint as FP
+import agentproof_scan.scan as scan
+import agentproof_scan.fingerprint as FP
 
 # 형식 맞는 합성 무효 canary (고엔트로피 → is_placeholder 통과, 실제 키 아님).
 CANARY = "sk-ant-Ab3xK9pQ2mZ7wR4tY6nL8vC1"

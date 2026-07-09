@@ -1,0 +1,19 @@
+# Defense-in-depth for the sdist. The wheel is governed by [tool.setuptools]
+# (explicit packages), but the sdist is assembled separately — pin it too.
+
+# Root-level dev helpers + the convenience launcher: NOT shipped.
+exclude reverify.py
+exclude storage_classifier.py
+exclude test_fingerprint.py
+exclude scan.py
+
+# Docs / defensive prompt tree: not a runtime dependency.
+prune prompts
+
+# Never ship caches, secrets, VCS, CI, or result logs.
+global-exclude __pycache__ *.py[cod] *.so
+global-exclude .env .env.*
+global-exclude *.jsonl
+global-exclude *.key *.pem
+prune .git
+prune .github
