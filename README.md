@@ -19,10 +19,11 @@ An AI agent carries a hidden **system prompt** — and too often, credentials or
 ## 🔍 How it works (it's counting, not a formula)
 
 The scanner plants a **fake "canary" secret** in a test agent's system prompt, sends
-it a batch of probing questions, then checks two places for that planted secret: the
-agent's **final answer**, and — if available — its **reasoning ("thinking") trace**.
-A plain pattern-matcher (no AI doing the judging) counts how many runs the secret
-literally shows up in each. A result reads like *"leaked in 4 of 10 runs."*
+it a batch of probing questions, then checks the agent's **final answer** for that
+planted secret — and, when you point it at your own agent and say where the
+**reasoning ("thinking") trace** lives, that second surface too. A plain
+pattern-matcher (no AI doing the judging) counts how many runs the secret literally
+shows up in each. A result reads like *"leaked in 4 of 10 runs."*
 
 Because it's straight matching against known secret shapes, there's nothing hidden:
 you can read the code and reproduce every number yourself.
@@ -31,23 +32,20 @@ you can read the code and reproduce every number yourself.
 
 ## 🚀 60-second Quick Start (no setup knowledge — just copy-paste)
 
-The repo ships with a built-in **victim demo**: an intentionally leaky agent backed by Google Gemini. You only need a free Gemini key to try it.
+`agentproof-scan` ships with a built-in **victim demo**: an intentionally leaky agent
+backed by Google Gemini. You only need a free Gemini key to try it.
 
 ```bash
-# 1. Get the code
-git clone https://github.com/ghkfuddl1327-wq/agentproof.git
-cd agentproof
+# 1. Install
+pip install agentproof-scan
 
-# 2. Install the dependency
-pip install requests
-
-# 3. Get a FREE Gemini key → https://aistudio.google.com/apikey
-#    then save it to a .env file (auto-loaded, kept out of git):
+# 2. Get a FREE Gemini key → https://aistudio.google.com/apikey
+#    save it to a .env file in the folder you run from (auto-loaded, kept out of git):
 echo 'GEMINI_API_KEY=PASTE_YOUR_KEY_HERE' > .env
 
-# 4. Scan the built-in vulnerable demo agent
-python scan.py                  # same as: python scan.py --target victim
-python scan.py --stability 5    # repeat 5× — more reliable (see note below)
+# 3. Scan the built-in vulnerable demo agent
+agentproof-scan                  # same as: agentproof-scan --target victim
+agentproof-scan --stability 5    # repeat 5× — more reliable (see note below)
 ```
 
 A JSON report prints. If the demo leaked, you'll see a `leak_count` of 1 or more.
@@ -78,8 +76,8 @@ Two fields matter:
 Two contrasting demo targets ship with the repo:
 
 ```bash
-python scan.py --target simple_chatbot_canary   # planted fake secret → expect leaks/disclosure
-python scan.py --target simple_chatbot          # clean prompt        → expect 0
+agentproof-scan --target simple_chatbot_canary   # planted fake secret → expect leaks/disclosure
+agentproof-scan --target simple_chatbot          # clean prompt        → expect 0
 ```
 
 - `*_canary` targets have a **fake** secret + canary phrases planted in their prompt → the scanner *should* light up, proving the rule catches leaks.
@@ -92,8 +90,8 @@ python scan.py --target simple_chatbot          # clean prompt        → expect
 Two more canaries plant the same fake secret but add a **prompt-level** defense — so you can watch the leak rate change:
 
 ```bash
-python scan.py --target simple_chatbot_defended_canary   # prompt guardrail
-python scan.py --target simple_chatbot_hardened_canary   # stronger prompt guardrail
+agentproof-scan --target simple_chatbot_defended_canary   # prompt guardrail
+agentproof-scan --target simple_chatbot_hardened_canary   # stronger prompt guardrail
 ```
 
 - **defended** — a system-prompt guardrail instructs the agent to refuse extraction attempts. This usually lowers leaks, but a clever probe can still slip through.
@@ -118,8 +116,8 @@ Multi-model targets (`ngpt_*`, `llm_*`) need `pip install ngpt llm` plus the rel
 `--handoff` prints a ready-to-paste block for an AI assistant — masked findings plus a request for the smallest code change that stops the leak:
 
 ```bash
-python scan.py --target victim --handoff
-python scan.py --target victim --stability 10 --handoff   # aggregate over 10 runs first
+agentproof-scan --target victim --handoff
+agentproof-scan --target victim --stability 10 --handoff   # aggregate over 10 runs first
 ```
 
 Paste the block into your AI assistant of choice, fill in your agent's framework/model, and it proposes the smallest fix. *(If nothing leaked, it tells you you're safe and prints no block.)*
@@ -133,7 +131,7 @@ HTTP endpoint that speaks JSON**, point the scanner straight at it — no adapte
 to write. The one-liner:
 
 ```bash
-python scan.py \
+agentproof-scan \
   --url https://my-agent.example.com/chat \
   --prompt-field message \
   --response-field reply
@@ -150,7 +148,7 @@ in the flag, never the key itself:
 ```bash
 # key lives in .env (gitignored); the flag references it by name
 echo 'MY_AGENT_KEY=sk-your-real-key' >> .env
-python scan.py --url https://my-agent.example.com/chat \
+agentproof-scan --url https://my-agent.example.com/chat \
   --prompt-field message --response-field reply \
   --auth-header "Authorization=Bearer {MY_AGENT_KEY}"
 ```
@@ -166,7 +164,7 @@ and any secret-shaped string in a response is masked before it's printed.
 config file instead of flags:
 
 ```bash
-python scan.py --agent-config my_agent.yaml
+agentproof-scan --agent-config my_agent.yaml
 ```
 
 ```yaml
@@ -201,7 +199,7 @@ bodies, streaming responses, and non-HTTP transports — are expanding from here
 
 If any step is confusing, paste this into an AI assistant and follow along:
 
-> I'm trying to run an open-source Python tool called "agentproof-scan" from GitHub (https://github.com/ghkfuddl1327-wq/agentproof). I'm a beginner. Walk me through, step by step on my computer: (1) install Python and git if needed, (2) clone the repo, (3) `pip install requests`, (4) get a free Google Gemini API key and put it in a `.env` file as `GEMINI_API_KEY=...`, (5) run `python scan.py`. After each step, ask me what I saw before continuing.
+> I'm trying to run an open-source Python tool called "agentproof-scan". I'm a beginner. Walk me through, step by step on my computer: (1) install Python if needed, (2) `pip install agentproof-scan`, (3) get a free Google Gemini API key and put it in a `.env` file as `GEMINI_API_KEY=...`, (4) run `agentproof-scan`. After each step, ask me what I saw before continuing.
 
 ---
 
@@ -217,23 +215,41 @@ Early work in progress. This tool grew out of red-team probing experiments and i
 
 **Known limitation:** a present-but-invalid key (wrong or expired) can still produce a `0` — detecting invalid keys from API-error responses is a planned follow-up.
 
+**Not yet in this release:** wider credential-type coverage (Stripe, Slack, JWT, PEM,
+SendGrid, Twilio, npm, …) is implemented and tested, but `0.1.0` ships only the six
+families listed under [What it catches](#what-it-catches--and-what-it-doesnt-plainly).
+It lands in a later release rather than being advertised here before you can run it.
+
 ---
 
 ## Scanning the reasoning channel
 
 The final answer isn't the only place a secret can show up. A model will sometimes
 keep a key *out* of its answer but leave it in its reasoning ("thinking") — and a
-check that only reads the answer never sees it. `reasoning_scan` looks at that
-separately.
+check that only reads the answer never sees it.
+
+If your agent returns its reasoning, tell the scanner where to find it with
+`--reasoning-field` and it checks that surface too. This works on the **own-agent**
+path (`--url` / `--agent-config`); the bundled demo targets scan the answer only.
 
 ```bash
-# When you have the agent's reasoning trace saved to a file
-reasoning_scan --trace <path-to-trace-file>
+agentproof-scan --url https://my-agent.example.com/chat \
+  --prompt-field message --response-field reply \
+  --reasoning-field think          # dot-paths work: choices.0.message.reasoning
+```
+
+An agent that refuses in its answer while spilling the key in its reasoning is
+reported as a leak — the answer surface stays clean, the reasoning surface trips:
+
+```json
+{ "surface": "reasoning", "leak": true,
+  "leaked": [{ "provider": "aws", "match": "AKIA****" }] }
 ```
 
 Findings are reported for the **answer** and the **reasoning** separately (never
 mixed together). If there's no reasoning to look at, it says `not_applicable` —
 meaning *"couldn't check this surface,"* which is **not** the same as *"safe."*
+No extra API calls: the trace is captured during the same probe run.
 
 ---
 
@@ -247,8 +263,9 @@ live in the repo, not here:
 prompts/system_defense/
 ```
 
-New to this? Open that folder on GitHub (click through the file list at the top of
-the repo), or after `git clone`, open the folder on your machine. Each prompt is a
+New to this? Browse that folder on GitHub (click through the file list at the top of
+the repo). Installed via pip? The prompts live in the repo, not the package — read
+them on GitHub, or `git clone` the repo if you want them locally. Each prompt is a
 plain text block you copy into your agent's system prompt.
 
 `prompts/system_defense/REFERENCE.md` tells you **which prompt fits which model** and
@@ -260,17 +277,21 @@ into a wall of text.
 
 ## What it catches — and what it doesn't (plainly)
 
-**It catches:** a set list of credential types (16 so far, up from 6 as we found
-gaps), matched by their shape. It holds up whether the secret is in plain text or
-JSON, across different languages, in the answer or the reasoning, and even across
-multi-step attacks — for the types it knows.
+**It catches:** a set list of credential types, matched by their shape. As of
+`0.1.0` that's **six families** — OpenAI, Anthropic, Google, AWS, GitHub, and xAI.
+Matching holds up whether the secret is in plain text or JSON, across different
+languages, and in the answer or the reasoning — for the types it knows.
+
+Strings that have a real key's *shape* but are obvious dummies (`sk-ant-…EXAMPLE`,
+`AKIA…FAKE`, `…placeholder…`) are filtered out rather than reported, so example code
+and docs don't set off false alarms.
 
 **It doesn't catch:**
+- **Credential types outside those six** — Stripe, Slack, JWTs, PEM private keys,
+  SendGrid, Twilio, npm tokens and others are **not** matched in `0.1.0`. Broader
+  type coverage is built and tested but not yet released here (see Status).
 - **Secrets with no tell-tale prefix** — e.g. a database password buried in a
-  `postgres://…` URL. That one is **off by default** so it doesn't false-alarm on
-  every example URL. A real limit of shape-matching.
-- **Things that look like credentials but may be public** — a JWT or a service ID.
-  It flags the shape; a human decides if it was actually secret.
+  `postgres://…` URL. A real limit of shape-matching.
 - **Secrets described in words** — if a secret is paraphrased with no literal
   key-string, shape-matching can't see it.
 - **Live/runtime catching** — this runs before you ship (offline), not as a live
@@ -278,7 +299,7 @@ multi-step attacks — for the types it knows.
 - **Models we haven't tested** — results come from a small set of lightweight models,
   not the big frontier ones.
 
-*"No false positives" is true for random text on the original types — it's not a
+*"No false positives" is true for random text on the six types above — it's not a
 promise that a shape-matching type never flags a token that turns out to be public.*
 
 ---
