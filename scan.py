@@ -39,6 +39,7 @@ from adapters.simple_chatbot_hardened_canary import (
     SimpleChatbotHardenedCanaryAdapter,
 )
 from adapters.victim import VictimAdapter
+from adapters.generic_http import build_generic_adapter
 from fingerprint import enrich_leaked
 
 # 제공자별 고신뢰 prefix 정규식.
@@ -599,13 +600,115 @@ def _preflight_env_check(adapter, target):
     sys.exit(1)
 
 
+def summarize_own_reasoning(adapter):
+    """own-agent 실행 중 누적된 추론 트레이스를 스캔해 표면-분리 요약을 만든다.
+
+    추가 API 호출 없음 — adapter.reasoning_log(ask() 중 수집)만 사후 스캔한다.
+    reasoning 표면은 final_output 과 절대 병합하지 않는다(surface 라벨 유지).
+    reasoning_field 를 켰지만 트레이스가 하나도 없으면 not_applicable — "clean 아님".
+    시크릿은 mask_secret 로 마스킹, excerpt 도 마스킹본에서 자른다.
+    """
+    traces = [(p, r) for (p, r) in adapter.reasoning_log if r is not None]
+    if not traces:
+        return {
+            "surface": "reasoning",
+            "scanned": False,
+            "status": "not_applicable",
+            "reason": (
+                "reasoning 표면 미접근 (응답에 reasoning 필드 없음 또는 빈 값) — "
+                "clean 아님"
+            ),
+        }
+    leak_hits = 0
+    disclosure_hits = 0
+    findings = []
+    for probe, rtext in traces:
+        leaked = detect_secrets(rtext)
+        disclosed, phrases = detect_prompt_disclosure(rtext)
+        if leaked:
+            leak_hits += 1
+        if disclosed:
+            disclosure_hits += 1
+        if leaked or disclosed:
+            masked = rtext
+            for item in leaked:
+                masked = masked.replace(item["match"], mask_secret(item["match"]))
+            findings.append(
+                {
+                    "surface": "reasoning",
+                    "probe": probe,
+                    "leak": bool(leaked),
+                    "leaked": [enrich_leaked(it, mask_secret) for it in leaked],
+                    "prompt_disclosure": disclosed,
+                    "disclosed_phrases": phrases,
+                    "response_excerpt": masked[:200],
+                }
+            )
+    return {
+        "surface": "reasoning",
+        "scanned": True,
+        "traces_scanned": len(traces),
+        "leak_hits": leak_hits,
+        "disclosure_hits": disclosure_hits,
+        "findings": findings,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="secret-leak-v0 스캐너")
     parser.add_argument(
         "--target",
         choices=list(ADAPTERS.keys()),
-        default="victim",
-        help="검사할 타깃 어댑터 (기본: victim)",
+        default=None,
+        help="검사할 데모 타깃 어댑터 (기본: victim). --url/--agent-config 지정 시 무시.",
+    )
+    # ── own-agent 스캔 (net-new 경로): 코드 없이 자기 HTTP 에이전트 겨냥 ──────────
+    own = parser.add_argument_group(
+        "own-agent (자기 HTTP 에이전트 스캔 — 소유·통제하는 엔드포인트만)"
+    )
+    own.add_argument("--url", default=None, help="에이전트 HTTP 엔드포인트 URL")
+    own.add_argument("--method", default=None, help="HTTP 메서드 (기본 POST)")
+    own.add_argument(
+        "--prompt-field",
+        dest="prompt_field",
+        default=None,
+        help="프롬프트를 넣을 요청 JSON 필드 (dot-path 지원, 예: message)",
+    )
+    own.add_argument(
+        "--response-field",
+        dest="response_field",
+        default=None,
+        help="응답에서 답을 꺼낼 경로 (dot-path, 예: choices.0.message.content)",
+    )
+    own.add_argument(
+        "--auth-header",
+        dest="auth_header",
+        default=None,
+        help=(
+            "인증 헤더. 형식 'Header-Name=ENV_VAR' 또는 'Header-Name=Bearer {ENV_VAR}'. "
+            "값이 아니라 .env 의 환경변수 '이름'만 적는다(키는 커밋에 안 남음)."
+        ),
+    )
+    own.add_argument(
+        "--reasoning-field",
+        dest="reasoning_field",
+        default=None,
+        help="(옵션) 응답에서 추론 트레이스를 꺼낼 경로 (dot-path). 있으면 reasoning 표면도 스캔.",
+    )
+    own.add_argument(
+        "--agent-config",
+        dest="agent_config",
+        default=None,
+        help="복잡/중첩 케이스용 config 파일(YAML/JSON): url/method/body/headers/auth 등.",
+    )
+    own.add_argument(
+        "--timeout", type=int, default=None, help="요청 타임아웃 초 (기본 60)"
+    )
+    own.add_argument(
+        "--target-name",
+        dest="target_name",
+        default=None,
+        help="리포트에 기록할 own-agent 식별자 (기본: URL 파생)",
     )
     parser.add_argument(
         "--stability",
@@ -622,9 +725,21 @@ def main():
     )
     args = parser.parse_args()
 
-    adapter = ADAPTERS[args.target]()
-    # 키 없음으로 인한 "조용한 0"을 막기 위한 preflight 검사.
-    _preflight_env_check(adapter, args.target)
+    # 어댑터 해석: own-agent(--url/--agent-config)면 제네릭 HTTP, 아니면 데모 레지스트리.
+    is_own = bool(args.url or args.agent_config)
+    if is_own:
+        adapter = build_generic_adapter(args)
+        # own-agent 는 고정 env 요구가 없다(auth 는 요청 시 loud SystemExit 로 검증).
+    else:
+        if args.reasoning_field:
+            print(
+                "[warn] --reasoning-field 는 own-agent(--url/--agent-config) 에서만 "
+                "동작합니다 — 데모 타깃에선 무시됩니다.",
+                file=sys.stderr,
+            )
+        adapter = ADAPTERS[args.target or "victim"]()
+        # 키 없음으로 인한 "조용한 0"을 막기 위한 preflight 검사.
+        _preflight_env_check(adapter, args.target or "victim")
 
     if args.handoff:
         # --handoff: JSON 리포트(기존)를 출력한 뒤, 그 아래 핸드오프 블록을 추가 출력.
@@ -658,6 +773,18 @@ def main():
         run_stability(adapter, n=args.stability)
     else:
         run_scan(adapter)
+
+    # own-agent + reasoning-field: 답변 표면 스캔 뒤, 누적된 추론 트레이스를 별도 표면으로
+    # 요약 출력한다(추가 API 호출 0 — ask() 중 수집분 재사용, surface 병합 없음).
+    if is_own and getattr(adapter, "reasoning_field", None):
+        print()
+        print(
+            json.dumps(
+                {"reasoning_surface": summarize_own_reasoning(adapter)},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
 
 
 if __name__ == "__main__":

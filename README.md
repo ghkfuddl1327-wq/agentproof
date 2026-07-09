@@ -126,11 +126,74 @@ Paste the block into your AI assistant of choice, fill in your agent's framework
 
 ---
 
-## 🗺️ Roadmap / scanning your own agent
+## 🎯 Scan your own agent (no code)
 
-Today the scanner runs against its built-in demo targets (`--target` is a fixed registry). Pointing it at **your own** agent — your URL, endpoint, or code — is in development and won't require editing the source.
+You don't have to be limited to the demo targets. If your agent is a **self-hosted
+HTTP endpoint that speaks JSON**, point the scanner straight at it — no adapter code
+to write. The one-liner:
 
-*(Advanced users can already add a target: implement the small `AgentAdapter` interface in `adapters/base.py` and register it in `ADAPTERS` in `scan.py`.)*
+```bash
+python scan.py \
+  --url https://my-agent.example.com/chat \
+  --prompt-field message \
+  --response-field reply
+```
+
+- `--url` — your agent's endpoint.
+- `--prompt-field` — the JSON field the probe text goes into (e.g. `message`).
+- `--response-field` — where the agent's answer comes back. Nested replies use a
+  dot-path, e.g. `--response-field choices.0.message.content`.
+
+**Needs auth?** Pass a header — but put only the **name** of an environment variable
+in the flag, never the key itself:
+
+```bash
+# key lives in .env (gitignored); the flag references it by name
+echo 'MY_AGENT_KEY=sk-your-real-key' >> .env
+python scan.py --url https://my-agent.example.com/chat \
+  --prompt-field message --response-field reply \
+  --auth-header "Authorization=Bearer {MY_AGENT_KEY}"
+```
+
+Your key stays in `.env`. It is never written to the config, the report, or any log,
+and any secret-shaped string in a response is masked before it's printed.
+
+**Reasoning trace?** If your agent returns its "thinking," add `--reasoning-field
+<path>` and the scanner checks that surface too — separately from the answer (see
+[Scanning the reasoning channel](#scanning-the-reasoning-channel)).
+
+**Nested or non-trivial requests** (custom headers, a deep request body) go in a small
+config file instead of flags:
+
+```bash
+python scan.py --agent-config my_agent.yaml
+```
+
+```yaml
+# my_agent.yaml
+url: https://my-agent.example.com/v1/chat
+method: POST
+prompt_field: messages.0.content         # inject the probe here
+response_field: choices.0.message.content # read the answer here
+reasoning_field: choices.0.message.reasoning   # optional
+auth_header: "Authorization=Bearer {MY_AGENT_KEY}"   # env-var name, not the key
+body:                                     # your request template
+  model: my-model
+  messages:
+    - role: user
+      content: ""
+```
+
+> ⚠️ **Scan only agents you own or control.** These probes are adversarial by design;
+> pointing them at a third-party endpoint you don't operate is your responsibility.
+> Also note each run makes **real API calls** to your agent (probes × `--stability`),
+> so it spends whatever those calls cost on your account — same as the demo Gemini key.
+
+*(Prefer to wire it in yourself? You still can: implement the small `AgentAdapter`
+interface in `adapters/base.py` and register it in `ADAPTERS` in `scan.py`.)*
+
+**Roadmap:** the generic HTTP path above is **shipped**. Broader shapes — non-JSON
+bodies, streaming responses, and non-HTTP transports — are expanding from here.
 
 ---
 
