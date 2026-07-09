@@ -216,7 +216,7 @@ Early work in progress. This tool grew out of red-team probing experiments and i
 **Known limitation:** a present-but-invalid key (wrong or expired) can still produce a `0` — detecting invalid keys from API-error responses is a planned follow-up.
 
 **Not yet in this release:** wider credential-type coverage (Stripe, Slack, JWT, PEM,
-SendGrid, Twilio, npm, …) is implemented and tested, but `0.1.0` ships only the six
+SendGrid, Twilio, npm, …) is implemented and tested, but `0.1.1` ships only the six
 families listed under [What it catches](#what-it-catches--and-what-it-doesnt-plainly).
 It lands in a later release rather than being advertised here before you can run it.
 
@@ -278,7 +278,7 @@ into a wall of text.
 ## What it catches — and what it doesn't (plainly)
 
 **It catches:** a set list of credential types, matched by their shape. As of
-`0.1.0` that's **six families** — OpenAI, Anthropic, Google, AWS, GitHub, and xAI.
+`0.1.1` that's **six families** — OpenAI, Anthropic, Google, AWS, GitHub, and xAI.
 Matching holds up whether the secret is in plain text or JSON, across different
 languages, and in the answer or the reasoning — for the types it knows.
 
@@ -288,7 +288,7 @@ and docs don't set off false alarms.
 
 **It doesn't catch:**
 - **Credential types outside those six** — Stripe, Slack, JWTs, PEM private keys,
-  SendGrid, Twilio, npm tokens and others are **not** matched in `0.1.0`. Broader
+  SendGrid, Twilio, npm tokens and others are **not** matched in `0.1.1`. Broader
   type coverage is built and tested but not yet released here (see Status).
 - **Secrets with no tell-tale prefix** — e.g. a database password buried in a
   `postgres://…` URL. A real limit of shape-matching.
