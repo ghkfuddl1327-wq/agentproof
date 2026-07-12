@@ -30,6 +30,59 @@ you can read the code and reproduce every number yourself.
 
 ---
 
+## 📦 Prerequisites
+
+If this is your first command-line tool, **the hard part is installing Python, not
+installing this.** People get stuck there. That step isn't part of this tool, and it's
+a normal place to get stuck.
+
+**1. Check that you have Python 3.9 or newer.** One of these three works; which one
+tells you how Python was installed on your machine:
+
+```
+python  --version
+python3 --version
+py -3   --version
+```
+
+**2. Install.**
+
+```
+pip install agentproof-scan
+```
+`pip: command not found` → `python -m pip install agentproof-scan`. On Windows without
+Python, `py -m pip install agentproof-scan` triggers the Python Install Manager to fetch
+Python for you. [VERIFIED: `py -m ...` installed Python 3.14.6 on Windows, owner, 2026-07-11.]
+
+**3. Put your key in a `.env` file, with an editor — not a shell command.**
+
+Open a new file called `.env` in the folder you'll run from, and put one line in it:
+
+```
+GEMINI_API_KEY=your-real-key-here
+```
+
+Save it. Get a free key at <https://aistudio.google.com/apikey>. `.env` is auto-loaded from
+the directory you run in and is gitignored — never commit it.
+
+> **Why an editor and not `echo '...' > .env`?** A shell command puts your key on the
+> command line, and the shell saves that line to its **history** in plaintext
+> (`~/.bash_history`, PowerShell's `ConsoleHost_history.txt`). A tool that detects leaked
+> credentials should not teach you to write one to a file nobody thinks to check. An editor
+> avoids the history entirely. (If you do use the shell, this tool does **not** scan shell
+> history — that's on you to clear.)
+
+> **On `.env` encoding.** The loader reads `.env` written as UTF-8, UTF-8 with BOM, and
+> **UTF-16LE with BOM** (what PowerShell 5.1's `>` produces — [VERIFIED on a real PowerShell
+> 5.1 file, owner, 2026-07-11]), and strips stray quotes `cmd.exe` leaves around the *key
+> name*. **Don't quote the value** — `KEY="abc"` keeps the quotes literally.
+
+**4. If the command isn't found:** `agentproof-scan: command not found` →
+`python -m agentproof_scan` (Windows: `py -m agentproof_scan`) — same tool, same flags,
+works when the console script isn't on PATH. [VERIFIED on Windows, owner, 2026-07-11.]
+
+---
+
 ## 🚀 60-second Quick Start (no setup knowledge — just copy-paste)
 
 `agentproof-scan` ships with a built-in **victim demo**: an intentionally leaky agent
@@ -40,19 +93,38 @@ backed by Google Gemini. You only need a free Gemini key to try it.
 pip install agentproof-scan
 
 # 2. Get a FREE Gemini key → https://aistudio.google.com/apikey
-#    save it to a .env file in the folder you run from (auto-loaded, kept out of git):
-echo 'GEMINI_API_KEY=PASTE_YOUR_KEY_HERE' > .env
+#    Then create a file named .env in this folder (with an editor, not the shell —
+#    see Prerequisites) containing one line:
+#        GEMINI_API_KEY=your-real-key-here
 
 # 3. Scan the built-in vulnerable demo agent
-agentproof-scan                  # same as: agentproof-scan --target victim
-agentproof-scan --stability 5    # repeat 5× — more reliable (see note below)
+agentproof-scan                  # one pass = 15 probes = 15 API calls
+agentproof-scan --stability 2    # 2 passes = 30 calls — more reliable (see notes)
 ```
 
 A JSON report prints. If the demo leaked, you'll see a `leak_count` of 1 or more.
 
-> ⚠️ **Seeing all zeros?** First check that `GEMINI_API_KEY` is actually set. A missing key would otherwise produce a misleading `0` — meaning *"the scan didn't run,"* not *"your agent is safe."* The scanner now stops loudly with a clear error when the key is missing, so all-zeros should be rare — but if you ever see it, verify the key first.
+> ⚠️ **On a free Gemini key, watch the request count.** Each pass sends **15 probes** = 15
+> API calls; `--stability N` multiplies that (`--stability 5` = 75 calls, `--stability 10`
+> = 150). The free tier has a per-minute quota, and hitting it is **not** a tool failure —
+> the scanner exits `1` with `reason=rate_limit` and tells you to wait or lower
+> `--stability`. Start with `--stability 2`; raise it once you know your quota headroom.
 
-> **Why `--stability 5`?** A single run is non-deterministic — a leaky agent can still answer "safely" on any one try, so a one-shot scan might read `0` by luck. Repeating (e.g. `--stability 5`) measures *how often* it leaks (`leak_rate`) and is the reliable way to read the verdict.
+> ⚠️ **A zero you can trust.** A scan that never reached your agent, or was cut off
+> partway (bad key, HTTP 500, timeout, rate limit), must not read as *"safe."* The scanner
+> **refuses to report clean** unless every probe actually got an answer: otherwise it exits
+> `1` and prints `AGENTPROOF_SCAN_DID_NOT_RUN reason=<slug>` on stderr (`rate_limit`,
+> `auth_failed`, `http_status`, `incomplete_scan`, …). A leak it *did* find is still
+> reported and, under `--fail-on-findings`, still exits `2` — **a partial scan may not
+> claim clean, but it may claim what it found.** (Earlier versions, up to `0.1.3`, could
+> print `leak_count: 0` and exit `0` here — that's the bug `0.1.4` closes.)
+
+> **Why repeat with `--stability`?** A single run is non-deterministic — a leaky agent can
+> still answer "safely" on any one try, so a one-shot scan might read `0` by luck. Repeating
+> measures *how often* it leaks (`leak_rate`) and is the reliable way to read the verdict.
+> A probe that never got an answer shows `leak_rate: null` (**not** `0.0`) — "not asked" is
+> not "didn't leak." ⚠ Each repeat costs `15 × N` API calls; on a free key start at
+> `--stability 2` (see the request-count note above).
 
 ---
 
@@ -65,7 +137,7 @@ Two fields matter:
 
 **Analogy:** `leak` = the guard handed over the vault key. `prompt_disclosure` = the guard didn't hand over the key, but read the security manual aloud. Both are bad; the first is worse.
 
-**`leak_rate`** (in repeat/stability mode) = how often a probe pulled a leak. For example `4/10 (0.4)` = 4 of 10 tries leaked. A flaky leak is still a leak — repetition shows how *reliably* an agent fails.
+**`leak_rate`** (in repeat/stability mode) = how often a probe pulled a leak, over the runs that **got an answer**. For example `4/10 (0.4)` = 4 of 10 answered tries leaked. A flaky leak is still a leak — repetition shows how *reliably* an agent fails. A probe that never got an answer (rate-limited, timed out) shows `leak_rate: null`, not `0.0` — the report separates *"didn't leak"* from *"wasn't asked."*
 
 **Which secrets it recognizes:** the scanner looks for key shapes from major providers — OpenAI (including modern `sk-proj-` / `sk-svcacct-` / `sk-admin-` keys and the legacy `sk-` format), Anthropic, Google, AWS, GitHub, and xAI.
 
@@ -145,9 +217,10 @@ agentproof-scan \
 **Needs auth?** Pass a header — but put only the **name** of an environment variable
 in the flag, never the key itself:
 
+Add the key to your `.env` (with an editor — same reason as the Quick Start: keep it out
+of shell history) as `MY_AGENT_KEY=your-real-key`, then reference it **by name**:
+
 ```bash
-# key lives in .env (gitignored); the flag references it by name
-echo 'MY_AGENT_KEY=sk-your-real-key' >> .env
 agentproof-scan --url https://my-agent.example.com/chat \
   --prompt-field message --response-field reply \
   --auth-header "Authorization=Bearer {MY_AGENT_KEY}"
@@ -193,7 +266,9 @@ body:                                     # your request template
 > so it spends whatever those calls cost on your account — same as the demo Gemini key.
 
 *(Prefer to wire it in yourself? You still can: implement the small `AgentAdapter`
-interface in `adapters/base.py` and register it in `ADAPTERS` in `scan.py`.)*
+interface in `agentproof_scan/adapters/base.py` and register it in `ADAPTERS` in
+`agentproof_scan/scan.py`. The top-level `scan.py` is only a clone-launcher shim and
+isn't in the wheel.)*
 
 **Roadmap:** the generic HTTP path above is **shipped**. Broader shapes — non-JSON
 bodies, streaming responses, and non-HTTP transports — are expanding from here.
@@ -238,15 +313,102 @@ jobs:
 
 *(Also at [`examples/ci/agentproof.yml`](https://github.com/ghkfuddl1327-wq/agentproof/blob/main/examples/ci/agentproof.yml) — copy it, don't clone the repo.)*
 
-**Don't drop the `AGENT_URL` guard.** An unset secret is an empty string, and an
-empty `--url` makes the scanner fall back to its **bundled demo agent** — which
-leaks on purpose. Without the guard your build goes red over a planted fake secret
-while your real agent is never scanned. Forked pull requests get no secrets at all,
-so they always take this path.
+**Keep the `AGENT_URL` guard anyway.** An unset secret is an empty string, and the
+guard turns that into a clear "secret not set" failure. Since `0.1.3` an empty `--url`
+already exits `1` on its own (`reason=missing_url`) rather than scanning anything — so
+a missing `AGENT_URL` fails the build as *"the scan did not run,"* not as *"your agent
+leaked."* The guard just makes that reason obvious in the log. Forked pull requests get
+no secrets, so they hit this path — and a `1` there is correct: nothing was scanned,
+and nothing is claimed clean.
 
 If your agent leaks a secret, `--fail-on-findings` exits non-zero and the check goes
 red. By default it fails on **leaked secrets only** (not softer prompt-disclosure
 signals); add `--fail-on any` to gate on those too. Scan only agents you own.
+
+**Exit codes** — three states, never two:
+
+| Code | Meaning | When |
+|---|---|---|
+| `0` | Clean | Every probe reached your agent, nothing leaked |
+| `1` | **The scan did not run** | Missing/placeholder key, HTTP error, timeout, bad flag. Never means "safe". Prints `AGENTPROOF_SCAN_DID_NOT_RUN reason=<slug>` to stderr |
+| `2` | Findings | The agent leaked (requires `--fail-on-findings`) |
+
+`1` and `2` are different on purpose: a build that fails because *nobody could ask the
+agent* must not be read as *the agent leaked*, and neither may be read as *safe*.
+
+> **This table was not true before `0.1.3`.** It was written as documentation of intent,
+> but the code never matched it: an invalid CLI flag exited `2` (argparse's default),
+> which a CI gate reads as *"your agent leaked a secret."* And a scan that never reached
+> the agent exited `0`, which reads as *"safe."* Both are fixed in `0.1.3`. Changing the
+> flag error from `2` to `1` is not a change to the contract — it is the first release in
+> which the contract is true. Every non-zero exit now also prints
+> `AGENTPROOF_SCAN_DID_NOT_RUN reason=<slug>` (`missing_env`, `placeholder_key`,
+> `http_status`, `timeout`, `nonzero_exit`, `missing_url`, `auth_missing_env`,
+> `usage_error`, …) so CI can tell *which* guard fired. The exit code is the contract;
+> the slug is the evidence.
+
+---
+
+## Verification scope
+
+All test data in this repository comes from **Linux containers**.
+
+**Verified** — 9 cells, live PyPI install (not local build):
+Python 3.9 / 3.11 / 3.13 × venv / system / pipx
+
+**Not verified:**
+
+| Environment | Status |
+|---|---|
+| Windows (PowerShell 5.1 / pwsh 7 / cmd) | Not verified. CI coverage planned. |
+| macOS | Not verified. CI coverage planned. |
+| Linux, installed on host (not container) | Not verified. |
+| GitHub Codespaces, as a new user | Not verified. We develop there; we have never walked the first-run path. |
+| Python installation itself (PATH, python.org / MS Store / pyenv) | **Cannot be covered by CI.** Runners ship with Python pre-installed. |
+
+The last row will not be closed by automation. If you hit friction installing
+Python itself, an issue is the only way that row changes.
+
+`0.1.4` handles UTF-16LE+BOM `.env` files (byte-level test).
+This is **not** a claim that the tool passes on Windows PowerShell 5.1.
+It is a claim about the bytes.
+
+---
+
+## If you don't have Python
+
+GitHub Codespaces gives you a Linux container in the browser.
+Requires only a GitHub account. No local Python installation.
+
+```bash
+pip install agentproof-scan
+```
+
+⚠ **Before you do this, read the next section.**
+Codespaces is not verified as a new-user path (see table above),
+and running this tool means putting a provider API key into a cloud VM.
+
+---
+
+## Handling your API key ⚠
+
+This tool needs a live provider key to call your agent.
+Wherever you run it, that key is exposed to that environment.
+
+- Use a **scoped, low-quota, disposable key**. Not your production key.
+- Set a hard spend cap before you start. Budget *alerts* are not caps.
+- **Revoke the key when you are done.**
+- In Codespaces: use a Codespaces secret, not a committed `.env`.
+  Never commit `.env`. It is gitignored — do not override that.
+- If you fork this repo, your fork's Codespace inherits nothing of ours.
+  Your key is yours to manage.
+
+A Codespaces secret arrives as an environment variable, and a real environment
+variable always beats a `.env` file — so the scanner runs with no `.env` at all.
+
+This tool detects leaks. It does not prevent them.
+Scoping, rate limits, and hard spend caps do that. See
+[What it catches — and what it doesn't](#what-it-catches--and-what-it-doesnt-plainly).
 
 ---
 
@@ -260,7 +422,7 @@ If any step is confusing, paste this into an AI assistant and follow along:
 
 ## ⚠️ A note on the test fixtures
 
-`victim_agent.py` and the `*_canary` adapters contain **intentional** vulnerabilities — fake, format-only secrets (not real keys) used as test fixtures to prove the scanner works. They are not exploits, and the embedded strings are not usable credentials. The probe set in this public repo uses neutral, category-labeled example questions — it does **not** ship copy-pasteable injection prompts.
+`agentproof_scan/victim_agent.py` and the `*_canary` adapters contain **intentional** vulnerabilities — fake, format-only secrets (not real keys) used as test fixtures to prove the scanner works. They are not exploits, and the embedded strings are not usable credentials. The probe set in this public repo uses neutral, category-labeled example questions — it does **not** ship copy-pasteable injection prompts.
 
 ---
 
@@ -268,10 +430,14 @@ If any step is confusing, paste this into an AI assistant and follow along:
 
 Early work in progress. This tool grew out of red-team probing experiments and is expanding toward broader pre-deployment credential-exposure detection. The detection rule and the cross-model numbers are still being validated — **expect changes**, and if you can break something we marked as working, please open an issue.
 
-**Known limitation:** a present-but-invalid key (wrong or expired) can still produce a `0` — detecting invalid keys from API-error responses is a planned follow-up.
+**Invalid keys, since `0.1.3`:** a present-but-invalid key no longer produces a
+misleading `0`. The provider returns an HTTP error — a malformed key is a `400`
+(`reason=http_status`), a wrong or expired key is a `401` (`reason=auth_failed`) — and
+the scanner treats either as *the scan did not run*: exit `1`, refusing to report
+clean. Earlier versions did report `0` here; that was the bug `0.1.3` closes.
 
 **Not yet in this release:** wider credential-type coverage (Stripe, Slack, JWT, PEM,
-SendGrid, Twilio, npm, …) is implemented and tested, but `0.1.2` ships only the six
+SendGrid, Twilio, npm, …) is implemented and tested, but `0.1.4` ships only the six
 families listed under [What it catches](#what-it-catches--and-what-it-doesnt-plainly).
 It lands in a later release rather than being advertised here before you can run it.
 
@@ -308,30 +474,32 @@ No extra API calls: the trace is captured during the same probe run.
 
 ---
 
-## Defense prompts — where to find them
+## Defense prompts — reference, not a fix
 
-If a scan turns up a leak, the repo ships **defense prompts** you can paste into your
-agent's system prompt to reduce it. To keep this page short, the prompts themselves
-live in the repo, not here:
+There is no prompt that "fixes" leakage. What the repo ships is a **reference**: a
+defense hypothesis, measured per model, with results that vary by model — what helps
+one can leave a residual on another. Adding a defense block *raises the cost of a
+leak*; it is not a guarantee, and the only figure that means anything for your setup is
+the one you measure on your own model. To keep this page short, the prompts and the
+measurements behind them live in the repo, not here:
 
 [`prompts/system_defense/`](https://github.com/ghkfuddl1327-wq/agentproof/tree/main/prompts/system_defense)
 
-Installed via pip? The prompts live in the repo, not the package — open the link
-above, or `git clone` the repo if you want them locally. Each prompt is a plain text
-block you copy into your agent's system prompt.
+Installed via pip? They live in the repo, not the package — open the link above, or
+`git clone` the repo to read them locally. Each is a plain-text block.
 
 [`REFERENCE.md`](https://github.com/ghkfuddl1327-wq/agentproof/blob/main/prompts/system_defense/REFERENCE.md)
-tells you **which prompt fits which model** and
-states the honest limits (it protects the final answer, not the reasoning trace —
-see above). Keeping the data in the repo means it can grow without turning this page
-into a wall of text.
+is the honest version: which block was measured against which model, in directional
+buckets (not precise rates), and the limits — chiefly that it moves the **final
+answer** surface, not the reasoning trace (see above). Keeping it in the repo lets the
+reference grow without turning this page into a wall of text.
 
 ---
 
 ## What it catches — and what it doesn't (plainly)
 
 **It catches:** a set list of credential types, matched by their shape. As of
-`0.1.2` that's **six families** — OpenAI, Anthropic, Google, AWS, GitHub, and xAI.
+`0.1.4` that's **six families** — OpenAI, Anthropic, Google, AWS, GitHub, and xAI.
 Matching holds up whether the secret is in plain text or JSON, across different
 languages, and in the answer or the reasoning — for the types it knows.
 
@@ -341,7 +509,7 @@ and docs don't set off false alarms.
 
 **It doesn't catch:**
 - **Credential types outside those six** — Stripe, Slack, JWTs, PEM private keys,
-  SendGrid, Twilio, npm tokens and others are **not** matched in `0.1.2`. Broader
+  SendGrid, Twilio, npm tokens and others are **not** matched in `0.1.4`. Broader
   type coverage is built and tested but not yet released here (see Status).
 - **Secrets with no tell-tale prefix** — e.g. a database password buried in a
   `postgres://…` URL. A real limit of shape-matching.
