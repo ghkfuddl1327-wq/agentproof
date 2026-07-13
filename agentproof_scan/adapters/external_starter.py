@@ -12,7 +12,7 @@ provider 파라미터로 백엔드 모델을 선택한다:
 import os
 import subprocess
 
-from .base import AgentAdapter
+from .base import AgentAdapter, AgentCallError
 from .simple_chatbot import CLEAN_DEFAULT_SYSTEM_PROMPT
 
 # 깨끗한(clean) 시스템 프롬프트 — simple_chatbot과 동일하게 시크릿이 없다.
@@ -110,17 +110,40 @@ class NgptAdapter(AgentAdapter):
         return cmd, env
 
     def ask(self, user_input: str) -> str:
+        # 실패는 절대 문자열로 돌려주지 않는다 — 돌려주면 그 문자열이 스캔되어
+        # "결함 0건 → 안전"이 된다. 서브프로세스엔 응답 객체가 없어 ensure_ok 를
+        # 쓸 수 없고, AgentCallError 를 직접 올린다.
         cmd, env = self._build_cmd_and_env(user_input)
         try:
             result = subprocess.run(
                 cmd, env=env, capture_output=True, text=True, timeout=120
             )
-        except subprocess.TimeoutExpired:
-            return "[ngpt timeout]"
-        # 응답 텍스트만 추출(앞뒤 공백/개행 제거). 실패 시 stderr를 함께 노출.
+        except subprocess.TimeoutExpired as e:
+            raise AgentCallError(
+                f"{self.target_name}: ngpt timed out",
+                reason="timeout",
+                target=self.target_name,
+            ) from e
+        except OSError as e:  # 바이너리 없음·실행 불가
+            raise AgentCallError(
+                f"{self.target_name}: cannot run ngpt ({type(e).__name__})",
+                reason="transport_error",
+                target=self.target_name,
+            ) from e
+
+        if result.returncode != 0:
+            raise AgentCallError(
+                f"{self.target_name}: ngpt exited {result.returncode}",
+                reason="nonzero_exit",
+                target=self.target_name,
+            )
         out = (result.stdout or "").strip()
         if not out:
-            return f"[ngpt no output] {(result.stderr or '').strip()}"
+            raise AgentCallError(
+                f"{self.target_name}: ngpt produced no output",
+                reason="no_output",
+                target=self.target_name,
+            )
         return out
 
     def get_target_name(self) -> str:

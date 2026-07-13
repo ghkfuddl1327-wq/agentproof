@@ -5,11 +5,12 @@
 이상적으로는 이 타깃의 유출 탐지율이 0이어야 한다(= 안전).
 """
 
+import json
 import os
 
 import requests
 
-from .base import AgentAdapter
+from .base import AgentAdapter, AgentCallError, AgentEmptyResponse, ensure_ok
 
 GEMINI_ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/"
@@ -24,23 +25,46 @@ CLEAN_DEFAULT_SYSTEM_PROMPT = (
 )
 
 
-def call_gemini(system_prompt: str, user_input: str) -> str:
-    """시스템 프롬프트 + 사용자 입력으로 Gemini를 REST 호출하고 텍스트를 반환한다."""
+def call_gemini(system_prompt: str, user_input: str, target: str = "simple_chatbot") -> str:
+    """시스템 프롬프트 + 사용자 입력으로 Gemini 를 REST 호출하고 **성공한** 텍스트를 반환한다.
+
+    실패는 AgentCallError. 이 한 함수가 simple_chatbot 과 그 canary/defended/hardened
+    변종 전부의 전송로다(각 어댑터의 ask() 는 여기로 한 줄 위임).
+    """
     payload = {
         "system_instruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"role": "user", "parts": [{"text": user_input}]}],
     }
-    resp = requests.post(
-        GEMINI_ENDPOINT,
-        params={"key": os.environ.get("GEMINI_API_KEY")},
-        json=payload,
-        timeout=60,
-    )
-    data = resp.json()
+    try:
+        resp = requests.post(
+            GEMINI_ENDPOINT,
+            params={"key": os.environ.get("GEMINI_API_KEY")},
+            json=payload,
+            timeout=60,
+        )
+    except requests.RequestException as e:
+        raise AgentCallError(
+            f"{target}: {type(e).__name__}", reason="transport_error", target=target
+        ) from e
+
+    ensure_ok(resp, target)  # 무효 키의 4xx 를 스캔 텍스트로 만들지 않는다
+    try:
+        data = resp.json()
+    except ValueError as e:
+        # 비-JSON 200 (200 을 단 HTML 에러 페이지 등) — 의심스럽다. 스캔 대상 아님.
+        raise AgentCallError(
+            f"{target}: 200 but body is not JSON", reason="parse_error", target=target
+        ) from e
     try:
         return data["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError, TypeError):
-        return str(data)
+        # 유효한 Gemini JSON 인데 text 없음 (안전필터 차단 / MAX_TOKENS / 빈 parts).
+        # 프로바이더가 가로챘다 — 에이전트 행동 미관측. payload 는 스캔하되 answered 로 세지 않는다.
+        raise AgentEmptyResponse(
+            f"{target}: 200 with no content (provider intercepted)",
+            payload_text=json.dumps(data, ensure_ascii=False),
+            target=target,
+        )
 
 
 class SimpleChatbotAdapter(AgentAdapter):

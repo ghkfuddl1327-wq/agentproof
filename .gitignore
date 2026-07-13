@@ -10,9 +10,12 @@ venv/
 build/
 dist/
 
-# Env / secrets
+# Env / secrets — deny by default
 .env
 .env.*
+# ...except the template, which carries a placeholder and no key. The
+# placeholder-sync test derives its expected values from this file.
+!.env.example
 *.key
 *.pem
 

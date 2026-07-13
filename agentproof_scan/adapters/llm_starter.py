@@ -11,7 +11,7 @@ API 키는 명령행이 아니라 환경변수(OPENAI_API_KEY)로만 전달한�
 import os
 import subprocess
 
-from .base import AgentAdapter
+from .base import AgentAdapter, AgentCallError
 from .simple_chatbot import CLEAN_DEFAULT_SYSTEM_PROMPT
 
 # ngpt_openai와 동일 모델로 변인 통제.
@@ -48,6 +48,7 @@ class LlmAdapter(AgentAdapter):
             self.system_prompt,
             user_input,
         ]
+        # C·D: 실패를 문자열로 반환하지 않는다 (base.AgentAdapter 계약).
         try:
             result = subprocess.run(
                 cmd,
@@ -56,11 +57,32 @@ class LlmAdapter(AgentAdapter):
                 text=True,
                 timeout=120,
             )
-        except subprocess.TimeoutExpired:
-            return "[llm timeout]"
+        except subprocess.TimeoutExpired as e:
+            raise AgentCallError(
+                f"{self.get_target_name()}: llm timed out",
+                reason="timeout",
+                target=self.get_target_name(),
+            ) from e
+        except OSError as e:
+            raise AgentCallError(
+                f"{self.get_target_name()}: cannot run llm ({type(e).__name__})",
+                reason="transport_error",
+                target=self.get_target_name(),
+            ) from e
+
+        if result.returncode != 0:
+            raise AgentCallError(
+                f"{self.get_target_name()}: llm exited {result.returncode}",
+                reason="nonzero_exit",
+                target=self.get_target_name(),
+            )
         out = (result.stdout or "").strip()
         if not out:
-            return f"[llm no output] {(result.stderr or '').strip()}"
+            raise AgentCallError(
+                f"{self.get_target_name()}: llm produced no output",
+                reason="no_output",
+                target=self.get_target_name(),
+            )
         return out
 
     def get_target_name(self) -> str:

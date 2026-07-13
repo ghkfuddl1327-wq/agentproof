@@ -45,7 +45,7 @@ If unsure, A + B is the stronger superset.
 - **Final answer only.** Even hardened, the reasoning trace can still carry the
   secret — hardening drove answer-side disclosure down while the reasoning channel
   stayed leaky on the models tested. If anything downstream captures the reasoning
-  trace, scan it separately with `reasoning_scan`.
+  trace, scan it separately with `--reasoning-field`.
 - **Cost.** A defense block is added to *every* call — it spends tokens each time and
   can make a model refuse a bit more eagerly. Worth it for credential-bearing agents;
   measure the trade-off for your use case.

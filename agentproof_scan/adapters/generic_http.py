@@ -24,7 +24,7 @@ import re
 
 import requests
 
-from .base import AgentAdapter
+from .base import AgentAdapter, AgentCallError, AgentConfigError, ensure_ok
 
 # `{ENV_VAR}` 토큰 — auth 헤더 템플릿에서 환경변수 값으로 치환.
 _ENV_TOKEN = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
@@ -100,13 +100,18 @@ def resolve_auth_header(spec):
         name = str(spec.get("name", "")).strip()
         template = str(spec.get("value", spec.get("template", ""))).strip()
         if not name:
-            raise SystemExit("[auth] config 의 auth_header 에 name 이 없습니다")
+            raise AgentConfigError(
+                "[auth] config 의 auth_header 에 name 이 없습니다", reason="auth_format"
+            )
     else:
         name, sep, template = str(spec).partition("=")
         name = name.strip()
         template = template.strip()
         if not sep or not name:
-            raise SystemExit("[auth] --auth-header 형식은 'Header-Name=ENV_VAR' 여야 합니다")
+            raise AgentConfigError(
+                "[auth] --auth-header 형식은 'Header-Name=ENV_VAR' 여야 합니다",
+                reason="auth_format",
+            )
 
     missing = []
     if "{" in template and "}" in template:
@@ -130,9 +135,10 @@ def resolve_auth_header(spec):
             value = val
 
     if missing:
-        raise SystemExit(
+        raise AgentConfigError(
             f"[auth] 환경변수 {', '.join(missing)} 미설정 — .env 에 값을 넣으세요. "
-            "(config/flag 엔 이름만 적습니다; 값은 .env 에서만 읽습니다.)"
+            "(config/flag 엔 이름만 적습니다; 값은 .env 에서만 읽습니다.)",
+            reason="auth_missing_env",
         )
     return name, value
 
@@ -169,14 +175,23 @@ class GenericHTTPAdapter(AgentAdapter):
         name=None,
     ):
         if not url:
-            raise SystemExit("[config] --url (또는 config 의 url)이 필요합니다")
+            # ⚠ scan.py 의 `is_own = args.url is not None ...` 센티널과 **둘 다**
+            #   load-bearing 이다. 센티널이 빈 url 을 여기로 보내고(라우팅), 이
+            #   검증이 거부한다(거부). 둘 중 하나를 중복이라 판단해 지우면 빈
+            #   --url 이 번들 데모로 폴백하는 버그가 다시 열린다.
+            #   불변식은 어느 한 줄이 아니라 둘의 합의다.
+            raise AgentConfigError(
+                "[config] --url (또는 config 의 url)이 필요합니다", reason="missing_url"
+            )
         if not prompt_field:
-            raise SystemExit(
-                "[config] --prompt-field (프롬프트를 넣을 JSON 필드)가 필요합니다"
+            raise AgentConfigError(
+                "[config] --prompt-field (프롬프트를 넣을 JSON 필드)가 필요합니다",
+                reason="missing_prompt_field",
             )
         if not response_field:
-            raise SystemExit(
-                "[config] --response-field (응답에서 답을 꺼낼 경로)가 필요합니다"
+            raise AgentConfigError(
+                "[config] --response-field (응답에서 답을 꺼낼 경로)가 필요합니다",
+                reason="missing_response_field",
             )
         self.url = url
         self.method = (method or "POST").upper()
@@ -213,17 +228,32 @@ class GenericHTTPAdapter(AgentAdapter):
     def ask(self, user_input):
         body = copy.deepcopy(self.body_template)
         dot_set(body, self.prompt_field, user_input)
-        resp = requests.request(
-            self.method,
-            self.url,
-            json=body,
-            headers=self._build_headers(),
-            timeout=self.timeout,
-        )
+        try:
+            resp = requests.request(
+                self.method,
+                self.url,
+                json=body,
+                headers=self._build_headers(),
+                timeout=self.timeout,
+            )
+        except requests.RequestException as e:
+            # 연결 실패·DNS·읽기 타임아웃. 예전엔 raw traceback 이었다.
+            raise AgentCallError(
+                f"{self.name}: {type(e).__name__}",
+                reason="transport_error",
+                target=self.name,
+            ) from e
+
+        # 상태 검사는 json()/text 접근보다 **먼저**. 뒤에 두면 4xx/5xx 오류 본문이
+        # 이미 스캔 대상 텍스트가 된 뒤이고, 오류 본문엔 시크릿 모양이 없으니
+        # "결함 0건 → 안전"이라는 거짓 GREEN 이 된다.
+        ensure_ok(resp, self.name)
+
         try:
             data = resp.json()
         except ValueError:
-            # 비-JSON 응답: 원문 텍스트를 그대로 스캔(누출 은닉 방지).
+            # 2xx 인데 비-JSON: 원문 텍스트를 그대로 스캔(누출 은닉 방지).
+            # 오류 페이지가 아니라 성공 응답이므로 스캔 대상이 맞다.
             self._record_reasoning(user_input, None)
             return resp.text
 
@@ -252,7 +282,10 @@ def load_agent_config(path):
 
     data = yaml.safe_load(text)  # YAML 로더는 JSON 도 파싱
     if not isinstance(data, dict):
-        raise SystemExit(f"[config] {path} 는 매핑(YAML/JSON 객체)이어야 합니다")
+        raise AgentConfigError(
+            f"[config] {path} 는 매핑(YAML/JSON 객체)이어야 합니다",
+            reason="config_not_mapping",
+        )
     return data
 
 
@@ -267,18 +300,35 @@ def build_generic_adapter(args):
         cfg = load_agent_config(args.agent_config)
 
     def pick(flag_attr, cfg_key):
+        # 센티널: 제공된 falsy 값(빈 문자열, 0)을 버리지 않는다. 버리면 유저가 명시한
+        # 값이 조용히 기본값으로 바뀐다. 빈 url 이 데모로 폴백하던 버그와 같은 부류다.
         v = getattr(args, flag_attr, None)
         return v if v is not None else cfg.get(cfg_key)
+
+    # 세 인자의 답이 서로 다르다 — is not None 일괄 치환은 오답이다.
+    #   --method ""   : 보존하면 잘못된 HTTP 요청 → 입구에서 거부(argparse 검증).
+    #   --timeout 0   : 보존하면 즉시 타임아웃      → 입구에서 거부(argparse 검증).
+    #   --auth-header "": 유일하게 의미가 있다 = "auth 없음". 보존하고 config 폴백을 막는다.
+    method = pick("method", "method")
+    timeout = pick("timeout", "timeout")
+
+    # `or cfg.get(...)` 였다: --auth-header "" 가 falsy 라 config 값으로 되살아났다.
+    # "auth 를 끄겠다"는 명시적 의사를 config 가 덮어쓰면 안 된다.
+    auth_header = getattr(args, "auth_header", None)
+    if auth_header is None:
+        auth_header = cfg.get("auth_header")
+    if auth_header == "":
+        auth_header = None  # 명시적 "auth 없음"
 
     return GenericHTTPAdapter(
         url=pick("url", "url"),
         prompt_field=pick("prompt_field", "prompt_field"),
         response_field=pick("response_field", "response_field"),
-        method=pick("method", "method") or "POST",
-        auth_header=getattr(args, "auth_header", None) or cfg.get("auth_header"),
+        method=method if method is not None else "POST",
+        auth_header=auth_header,
         headers=cfg.get("headers"),
         body=cfg.get("body"),
         reasoning_field=pick("reasoning_field", "reasoning_field"),
-        timeout=pick("timeout", "timeout") or 60,
+        timeout=timeout if timeout is not None else 60,
         name=pick("target_name", "name"),
     )

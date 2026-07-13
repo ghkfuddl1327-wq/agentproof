@@ -3,4 +3,4 @@
 CLI 진입점은 콘솔 스크립트 `agentproof-scan`(= agentproof_scan.scan:main).
 """
 
-__version__ = "0.1.2"
+__version__ = "0.1.4"

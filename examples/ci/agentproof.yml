@@ -25,9 +25,10 @@ jobs:
           AGENT_URL: ${{ secrets.AGENT_URL }}
           MY_AGENT_KEY: ${{ secrets.MY_AGENT_KEY }}
         run: |
-          # Without this, an unset AGENT_URL is an empty string and the scanner
-          # falls back to its bundled demo agent — which leaks on purpose. The build
-          # would go red for a planted fake secret, not for your agent.
+          # An unset AGENT_URL is an empty string. Since 0.1.3 an empty --url exits 1
+          # on its own (reason=missing_url), so this guard is not strictly required —
+          # but it turns that into an obvious "secret not set" message in the log
+          # instead of a bare missing_url. Forked PRs get no secrets and hit this path.
           if [ -z "$AGENT_URL" ]; then
             echo "AGENT_URL secret is not set — refusing to scan. (Forked PRs do not get secrets.)"
             exit 1
