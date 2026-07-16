@@ -434,10 +434,24 @@ If any step is confusing, paste this into an AI assistant and follow along:
 Early work in progress. This tool grew out of red-team probing experiments and is expanding toward broader pre-deployment credential-exposure detection. The detection rule and the cross-model numbers are still being validated — **expect changes**, and if you can break something we marked as working, please open an issue.
 
 **Invalid keys, since `0.1.3`:** a present-but-invalid key no longer produces a
-misleading `0`. The provider returns an HTTP error — a malformed key is a `400`
-(`reason=http_status`), a wrong or expired key is a `401` (`reason=auth_failed`) — and
-the scanner treats either as *the scan did not run*: exit `1`, refusing to report
-clean. Earlier versions did report `0` here; that was the bug `0.1.3` closes.
+misleading `0`. The provider returns an HTTP error and the scanner treats it as *the
+scan did not run*: exit `1`, no report, refusing to claim clean. Earlier versions did
+report `0` here; that was the bug `0.1.3` closes.
+
+**Which slug you get depends on your provider, not on us.** The scanner reports
+`reason=auth_failed` only for HTTP **401/403**; every other error status becomes
+`reason=http_status`. Providers disagree about what a bad key is:
+
+| What you do | Gemini (the Quick Start default) | OpenAI |
+|---|---|---|
+| Key not set at all | exit `1`, `reason=missing_env` | exit `1`, `reason=missing_env` |
+| Malformed key | `400` → exit `1`, `reason=http_status` | `401` → exit `1`, `reason=auth_failed` |
+| Wrong or expired key | `400` → exit `1`, `reason=http_status` | `401` → exit `1`, `reason=auth_failed` |
+
+So on the demo path a bad key shows up as `http_status`, **not** `auth_failed` — Google
+answers a bad key with `400`, not `401`. [VERIFIED against both live APIs, 2026-07-16.]
+Don't branch your CI on the slug to mean "bad key"; branch on the exit code. Whatever
+the slug, the contract is the same: **exit `1` and no clean verdict.**
 
 **Released in `0.2.0`:** the wider credential-type coverage that `0.1.4` held back
 (Stripe, Slack, JWT, PEM, SendGrid, Twilio, npm, GitHub fine-grained PAT, GCP) now
@@ -478,6 +492,38 @@ Findings are reported for the **answer** and the **reasoning** separately (never
 mixed together). If there's no reasoning to look at, it says `not_applicable` —
 meaning *"couldn't check this surface,"* which is **not** the same as *"safe."*
 No extra API calls: the trace is captured during the same probe run.
+
+> ⚠️ **`leak_count` does not include reasoning leaks — gate your CI on the exit code.**
+> Keeping the surfaces separate has a sharp edge: the top-level `leak_count` counts the
+> **answer** surface only. The reasoning surface is reported in its own block. So an
+> agent that refuses in its answer and spills the key in its reasoning prints
+> `leak_count: 0`, and **a CI step that greps `leak_count` will pass it** — the exact
+> blind spot this page opens with.
+>
+> Use the gate instead. It covers **both** surfaces:
+>
+> ```bash
+> agentproof-scan --agent-config my_agent.yaml --fail-on-findings   # reasoning-only leak → exit 2
+> ```
+>
+> `--fail-on secret` behaves the same way for secrets. [VERIFIED: a reasoning-only leak
+> exits `2` under both flags, 2026-07-16.] Read `leak_count` as *"leaks in the answer,"*
+> never as *"leaks."*
+
+**This surface only exists if your provider hands you the trace.** It's not something
+the scanner can go and fetch — if the API doesn't return a thinking field, there is
+nothing to scan and you get `not_applicable`, which is *"we couldn't look,"* not a pass.
+Providers differ, and the field's location differs too, so you have to point at it:
+
+| Provider | Trace returned? | `--reasoning-field` path |
+|---|---|---|
+| OpenAI (`gpt-4o-mini`) | No | — surface is `not_applicable` |
+| Anthropic (extended thinking on) | Yes | `content.0.thinking` (answer: `content.1.text`) |
+| OpenAI-shaped APIs that expose it | Varies | `choices.0.message.reasoning` |
+
+[Observed 2026-07-16; providers change these, so check yours rather than trusting the
+table.] A model that returns no trace isn't safer than one that does — you just can't
+see that surface.
 
 ---
 
