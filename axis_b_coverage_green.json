@@ -1,0 +1,138 @@
+{
+  "axis": "B",
+  "note": "detector coverage boundary post multi-type build, per-type counts (0 API, synthetic). 15 default-ON + 1 opt-in (postgres, FP0 미달로 보류).",
+  "matcher_families": [
+    "anthropic",
+    "openai",
+    "xai",
+    "google",
+    "github",
+    "aws",
+    "stripe",
+    "slack",
+    "github_pat",
+    "jwt",
+    "pem",
+    "sendgrid",
+    "gcp",
+    "npm",
+    "twilio"
+  ],
+  "optional_families": [
+    "postgres"
+  ],
+  "types": {
+    "stripe_secret": {
+      "detected": true,
+      "detected_as": [
+        "stripe"
+      ],
+      "default_on": true,
+      "nearmiss_fired_as": [],
+      "fake_masked": "sk_live_****"
+    },
+    "slack_bot": {
+      "detected": true,
+      "detected_as": [
+        "slack"
+      ],
+      "default_on": true,
+      "nearmiss_fired_as": [],
+      "fake_masked": "xoxb-****"
+    },
+    "github_finegrained": {
+      "detected": true,
+      "detected_as": [
+        "github_pat"
+      ],
+      "default_on": true,
+      "nearmiss_fired_as": [],
+      "fake_masked": "github_pat_****"
+    },
+    "jwt": {
+      "detected": true,
+      "detected_as": [
+        "jwt"
+      ],
+      "default_on": true,
+      "nearmiss_fired_as": [],
+      "fake_masked": "eyJ****"
+    },
+    "pem_private_key": {
+      "detected": true,
+      "detected_as": [
+        "pem"
+      ],
+      "default_on": true,
+      "nearmiss_fired_as": [],
+      "fake_masked": "-----BEGIN ****"
+    },
+    "postgres_uri": {
+      "detected": true,
+      "detected_as": [
+        "postgres"
+      ],
+      "default_on": false,
+      "nearmiss_fired_as": [],
+      "fake_masked": "post****"
+    },
+    "sendgrid": {
+      "detected": true,
+      "detected_as": [
+        "sendgrid"
+      ],
+      "default_on": true,
+      "nearmiss_fired_as": [],
+      "fake_masked": "SG.****"
+    },
+    "gcp_oauth_secret": {
+      "detected": true,
+      "detected_as": [
+        "gcp"
+      ],
+      "default_on": true,
+      "nearmiss_fired_as": [],
+      "fake_masked": "GOCSPX-****"
+    },
+    "npm_token": {
+      "detected": true,
+      "detected_as": [
+        "npm"
+      ],
+      "default_on": true,
+      "nearmiss_fired_as": [],
+      "fake_masked": "npm_****"
+    },
+    "twilio_api_key": {
+      "detected": true,
+      "detected_as": [
+        "twilio"
+      ],
+      "default_on": true,
+      "nearmiss_fired_as": [],
+      "fake_masked": "SK****"
+    }
+  },
+  "summary": {
+    "n_types": 10,
+    "caught": [
+      "stripe_secret",
+      "slack_bot",
+      "github_finegrained",
+      "jwt",
+      "pem_private_key",
+      "postgres_uri",
+      "sendgrid",
+      "gcp_oauth_secret",
+      "npm_token",
+      "twilio_api_key"
+    ],
+    "n_caught": 10,
+    "missed": [],
+    "n_missed": 0,
+    "opt_in_types": [
+      "postgres_uri"
+    ],
+    "nearmiss_false_positives": []
+  }
+}

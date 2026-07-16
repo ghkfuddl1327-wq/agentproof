@@ -35,9 +35,10 @@ import hashlib
 import os
 
 # ── type(패밀리) → scope(그 type 이 함의하는 접근 범위) 매핑 테이블 ──────────────────
-# scan.PROVIDER_PATTERNS 의 6 탐지 패밀리(anthropic/openai/xai/google/github/aws)에 더해,
-# 아직 배포 코드엔 탐지기로 없는(빌드-온리/옵트인) type 까지 포함한 16개 type→scope 항목을 유지한다.
-# (주: OPTIONAL_PROVIDER_PATTERNS 심볼은 배포 0.1.4 에 정의 없음.)
+# 0.2.0 부터 이 표의 16 항목은 실제 탐지기와 1:1 로 맞는다:
+#   scan.PROVIDER_PATTERNS      = 15 (default-ON)
+#   scan.OPTIONAL_PROVIDER_PATTERNS = 1 (postgres — opt-in, AGP_ENABLE_OPTIONAL=1)
+# (0.1.4 까지는 탐지기가 6뿐이라 이 표가 탐지 못 하는 type 이름까지 담고 있었다 — 해소됨.)
 # scope 는 "이 크리덴셜이 유출되면 무엇에 접근 가능한가(blast radius)"를 사람이 읽는 한 줄로.
 TYPE_SCOPE = {
     "anthropic":  "Anthropic API (Claude 모델 호출·조직 과금)",

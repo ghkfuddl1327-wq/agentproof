@@ -140,6 +140,22 @@ def test_unknown_type_falls_back_not_raises():
     assert FP.scope_for("nonexistent_family") == FP.UNKNOWN_SCOPE
 
 
+# ── (+) 역방향 불변식: TYPE_SCOPE 에 '탐지 못 하는' 패밀리 이름이 남지 않는다 ──────────
+# 왜 필요한가: 위 test_every_family_has_scope 는 한 방향(탐지기 ⊆ TYPE_SCOPE)만 잠갔다.
+# 그래서 0.1.4 까지 TYPE_SCOPE 가 탐지기에 없는 10개 type 이름(stripe/slack/…)을 담고도
+# GREEN 이었다 — 표가 도구의 능력을 실제보다 넓게 광고하는 셈이었다(0.2.0 에서 해소).
+# 두 방향을 모두 잠가야 표와 탐지기가 같이 움직인다.
+def test_no_scope_for_undetectable_family():
+    detectable = {n for n, _ in scan.PROVIDER_PATTERNS} | {
+        n for n, _ in scan.OPTIONAL_PROVIDER_PATTERNS
+    }
+    orphan = set(FP.TYPE_SCOPE) - detectable
+    assert not orphan, (
+        f"TYPE_SCOPE 에 탐지 불가 패밀리 {sorted(orphan)} — 표가 실제 탐지 능력보다 넓다. "
+        "탐지기를 추가하든지 표에서 빼라(둘은 같이 움직여야 한다)."
+    )
+
+
 if __name__ == "__main__":
     fails = []
     for name, fn in sorted(globals().items()):
