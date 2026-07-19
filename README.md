@@ -1,5 +1,7 @@
 # agentproof-scan
 
+> **Status: maintenance mode** — issues welcome, bugs get fixed, no new features. Extensions ship as separate projects.
+
 **Catch your AI agent leaking its system prompt or API keys — before you ship it.**
 
 `agentproof-scan` is a pre-deployment security scanner for self-hosted AI agents. It sends a batch of probing questions to an agent and checks whether the agent spills (a) strings shaped like real secrets (API keys) or (b) the hidden contents of its own system prompt. Think of it as a smoke test: *"does my agent keep its mouth shut under pressure?"*
@@ -273,8 +275,9 @@ interface in `agentproof_scan/adapters/base.py` and register it in `ADAPTERS` in
 `agentproof_scan/scan.py`. The top-level `scan.py` is only a clone-launcher shim and
 isn't in the wheel.)*
 
-**Roadmap:** the generic HTTP path above is **shipped**. Broader shapes — non-JSON
-bodies, streaming responses, and non-HTTP transports — are expanding from here.
+**Scope:** the generic HTTP path above is **shipped** and is where this tool stops.
+Broader shapes — non-JSON bodies, streaming responses, and non-HTTP transports — are
+out of scope here (maintenance mode); they belong to separate follow-on projects.
 
 ---
 
@@ -431,7 +434,7 @@ If any step is confusing, paste this into an AI assistant and follow along:
 
 ## Status
 
-Early work in progress. This tool grew out of red-team probing experiments and is expanding toward broader pre-deployment credential-exposure detection. The detection rule and the cross-model numbers are still being validated — **expect changes**, and if you can break something we marked as working, please open an issue.
+This tool grew out of red-team probing experiments and has reached the scope it set out to cover. It is now in **maintenance mode**: issues are welcome and bugs get fixed, but no new features land here — further credential-exposure work ships as separate projects rather than growing this one. The detection rule and the cross-model numbers are still worth scrutiny — if you can break something marked as working, please open an issue.
 
 **Invalid keys, since `0.1.3`:** a present-but-invalid key no longer produces a
 misleading `0`. The provider returns an HTTP error and the scanner treats it as *the
