@@ -1,0 +1,20 @@
+{
+  "all_byte_identical": true,
+  "families": [
+    "gcp",
+    "github_pat",
+    "jwt",
+    "npm",
+    "pem",
+    "sendgrid",
+    "slack",
+    "stripe",
+    "twilio"
+  ],
+  "mismatched": [],
+  "n": 9,
+  "note": "shape-only synthetic canaries reproduced byte-for-byte from random.Random(20260715); values match provider FORMAT, authenticate against nothing (see SECURITY.md). No secret value is written here.",
+  "reproduced": 9,
+  "seed": 20260715,
+  "tag": "SEED-REPRO-GREEN"
+}

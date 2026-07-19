@@ -55,17 +55,25 @@ are reproducible from the committed source with the standard library plus
    `scan.is_placeholder(...) == False` (high entropy, no placeholder keyword) —
    confirming it is a genuine positive control for the detector, not a dummy the
    entropy gate would silently drop.
+4. **Seed regeneration byte-match.** The nine values regenerate byte-for-byte
+   from `random.Random(20260715)` via the committed generator
+   [`gen_multitype_canary.py`](gen_multitype_canary.py). Run it twice for
+   identical output; it exits non-zero if any fixture fails to reproduce. This
+   ties every value to a deterministic, inspectable origin — no value is a
+   hand-typed string of unknown provenance.
 
-Checks (1)–(3) run entirely offline against the committed source. They
-establish *non-functionality by construction*, which is the property that
-matters for push-protection review.
+Checks (1)–(4) run entirely offline against the committed source. They
+establish *non-functionality by construction* (1–3) and *deterministic
+provenance* (4), which are the properties that matter for push-protection
+review.
 
-> Provenance note: the `random.Random(20260715)` seed is recorded as the
-> generation origin, but the generator script that reproduces these exact bytes
-> is **not** committed, so a byte-for-byte "regenerate from seed" reproduction
-> is not currently available. The verification of record is the structural
-> proof above (non-JSON header, unparseable PEM, detector-classified,
-> non-placeholder), which does not depend on trusting a generator.
+> Reproducing check (4):
+> ```bash
+> python gen_multitype_canary.py   # → SEED-REPRO GREEN: 9/9 … ; writes seed_repro_green.json
+> ```
+> The generator emits the same shape-only synthetic strings; it does not mint
+> usable credentials. `seed_repro_green.json` records only per-family booleans —
+> no secret value is written to it.
 
 ---
 
